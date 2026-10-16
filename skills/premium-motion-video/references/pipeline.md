@@ -1,6 +1,7 @@
 # Pipeline, commands and measured timings
 
 ## Commands
+Windows: `python3` may be the Microsoft Store stub. Use `python` instead, or the project venv `./.venv/Scripts/python.exe` if it exists (see `WINDOWS-SETUP.md`). Set `PYTHONUTF8=1` if the console fails on Vietnamese or ✓ characters.
 ```bash
 npm i                                   # playwright (Chromium) — once
 python3 -m pip install librosa soundfile numpy   # audio tools — once; ffmpeg must be on PATH
