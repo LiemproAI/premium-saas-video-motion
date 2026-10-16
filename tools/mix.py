@@ -16,6 +16,8 @@ import numpy as np, librosa, soundfile as sf
 
 ap = argparse.ArgumentParser(); ap.add_argument('cues'); ap.add_argument('--music'); ap.add_argument('--sfx', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets', 'audio', 'sfx.json'))
 ap.add_argument('--out', default='out/mix.wav'); ap.add_argument('--lufs', type=float, default=-14); ap.add_argument('--music-gain', type=float, default=-3); ap.add_argument('--fade', type=float, default=0.05, help='fade-out seconds at the end (use ~1.5 for a logo ending, 0.05 for loops)')
+ap.add_argument('--vo', help='voice-over wav (from tools/vo_build.py), placed at t=0; music ducks under it')
+ap.add_argument('--duck', type=float, default=10, help='music reduction in dB while VO speaks (8–12 typical)')
 a = ap.parse_args()
 C = json.load(open(a.cues)); B = C['B']; dur = C['DUR']; cues = C['cues']; M = json.load(open(a.sfx)); M = {k: (v if os.path.isabs(v) else os.path.join(os.path.dirname(os.path.abspath(a.sfx)), v)) for k, v in M.items() if isinstance(v, str)}; sr = 48000
 L = int(dur * sr)
@@ -36,6 +38,12 @@ for c in cues:
     y *= 10 ** (c.get('gain', -18) / 20) / max(1e-6, env.max())
     s = int(c['beat'] * B * sr) - ref; i0, i1 = max(0, s), min(L, s + y.shape[1])
     if i1 > i0: out[:, i0:i1] += y[:, i0 - s:i1 - s]
+if a.vo:
+    from scipy.ndimage import uniform_filter1d
+    v, _ = librosa.load(a.vo, sr=sr, mono=True); V = np.zeros(L); n = min(len(v), L); V[:n] = v[:n]
+    speaking = uniform_filter1d((np.abs(V) > 10 ** (-40 / 20)).astype(float), size=int(0.3 * sr), mode='nearest')
+    mus = mus * (1 - (1 - 10 ** (-a.duck / 20)) * np.clip(speaking * 2, 0, 1))  # ducked wherever the VO is active
+    out = out + V
 mix = mus * 10 ** (a.music_gain / 20) + out
 tmp = tempfile.mktemp(suffix='.wav'); sf.write(tmp, mix.T, sr)
 os.makedirs(os.path.dirname(a.out) or '.', exist_ok=True)

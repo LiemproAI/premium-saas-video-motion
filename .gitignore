@@ -15,3 +15,5 @@ examples/*.mp4
 _to_delete/
 .DS_Store
 examples/*/out/
+
+package-lock.json

@@ -76,8 +76,9 @@ brand wordmarks in the brand font.
 |---|---|---|
 | **No VO — music + SFX only** (default) | Film is cut to the music; on-screen text carries the message | nothing |
 | **VO via ElevenLabs** | Claude writes the VO script, generates the voice, cuts the film to it | ElevenLabs connected (the ElevenLabs connector/MCP, or an API key set up for the session) + a voice choice (voice name/ID, or "pick one": male/female, tone, pace). If not connected yet, say how to connect it; meanwhile build to the script timing and drop the VO in when it arrives |
+| **VO via VieNeu (local, Vietnamese)** | Claude writes the script, generates each line with the local VieNeu Studio server, cuts the film to the timed lines | VieNeu Studio running at `http://127.0.0.1:8001` (check `GET /api/health` → `loaded: true`) + a voice id from `GET /api/voices` (or "pick one"). If the server is down, ask the user to start it; do not switch to another TTS silently |
 | **VO self-upload** | User supplies the recorded VO (mp3/wav); film is cut to it | Upload the audio file in the chat, **or** copy it into `<film>/audio/vo/` (e.g. `examples/<film>/audio/vo/vo.mp3`) in the connected folder, and say when it is there. If they want a script to record from, Claude writes it first |
-For ElevenLabs/self-upload also ask in the same message: VO language/tone, and whether Claude writes the script (default yes).
+For ElevenLabs/VieNeu/self-upload also ask in the same message: VO language/tone, and whether Claude writes the script (default yes).
 
 **Also in the same message (if unknown):** length (default 45–60 s), music (library mood or the user's file),
 CTA text + URL/hotline for the end card, and permission to capture screens locally if that will be needed.
@@ -134,15 +135,21 @@ motion (button press, card grow, number count, cursor). Illustrative data only w
 ## Voice-over (when Q4 ≠ no VO)
 1. **Script first.** One idea per sentence, matching the beat map scenes. Vietnamese reads ≈ 2.3–2.6 words/s
    (60 s ≈ 140–160 words incl. pauses); English ≈ 2.5 words/s. Leave 1.5–2 s of VO-free air on the logo/CTA.
-2. **Get the audio.** ElevenLabs: list voices, pick the one the user chose (or the closest match to their description and
-   say which), generate per scene/sentence (easier to retime) or one take; save to `<film>/audio/vo/`. Self-upload: read
-   it from the chat upload or `<film>/audio/vo/`.
-3. **Timings.** Transcribe with word timestamps (ElevenLabs speech-to-text, Whisper, or the TTS alignment output) →
-   `vo.json` `[{t0, t1, text}]`. Scene starts snap to sentence starts rounded to the nearest beat; key words land on
-   visuals (the number counts up as the VO says it). Pick music BPM/splice after the VO length is known.
-4. **Mix.** VO is the lead: music ducked 8–12 dB under speech (e.g. ffmpeg
-   `[music][vo]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400`), SFX lighter than without VO, final
-   loudness ≈ −14 LUFS with VO peaks ≈ −1.5 dBTP. Check intelligibility on laptop speakers.
+2. **Get the audio.**
+   - **VieNeu (local):** write `<film>/vo/script.json` = `[{"t": <start s>, "text": "...", "voice": "<id>"}]` with `t` snapped
+     to beat starts. Build it with `python tools/vo_build.py vo/script.json --voice "<id>" --out <film>/out/vo.wav`. This
+     writes `vo.wav` and `vo.json` `[{t0, t1, text}]`; each line keeps its exact length. Voice ids come from `/api/voices`
+     (`node tools/vo.mjs --list`), never invented.
+   - **ElevenLabs:** list voices, pick the one the user chose (or the closest match and say which), generate per
+     sentence (easier to retime) or one take; save to `<film>/audio/vo/`.
+   - **Self-upload:** read it from the chat upload or `<film>/audio/vo/`. Run `faster-whisper` on it to get `vo.json`
+     (word timings for the key-word sync below).
+3. **Timings.** `vo.json` `[{t0, t1, text}]` is the source of truth. Scene starts snap to sentence starts rounded to the
+   nearest beat; key words land on visuals (the number counts up as the VO says it). Pick music BPM/splice after the VO
+   length is known: fix the VO length first, then fit the music to it.
+4. **Mix.** `python tools/mix.py out/cues.json --music out/edit.wav --sfx assets/audio/sfx.json --vo out/vo.wav --duck 10`.
+   VO is the lead: the music drops by `--duck` dB (8–12) wherever the voice is active, SFX sit lighter than without VO,
+   and the output is normalised to ≈ −14 LUFS with VO peaks ≈ −1.5 dBTP. Check intelligibility on laptop speakers.
 5. Optional burned-in subtitles from `vo.json` (Vietnamese: keep diacritics, ≤ 2 lines, ≥ 44 px at 1080p).
 
 ## Style comes from the brand, not from a house style
